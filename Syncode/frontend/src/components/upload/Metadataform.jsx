@@ -7,7 +7,7 @@ export const MetadataForm = ({ metadata, setMetadata }) => {
 
       <div className="grid md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm mb-2">Case ID</label>
+          <label className="block text-sm mb-2">Case ID (optional)</label>
           <input
             value={metadata.caseId}
             onChange={(e) =>

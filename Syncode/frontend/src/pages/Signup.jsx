@@ -75,7 +75,7 @@ export default function SignUpPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Signup failed");
+        throw new Error(data.error || data.message || "Signup failed");
       }
 
       navigate("/dashboard");

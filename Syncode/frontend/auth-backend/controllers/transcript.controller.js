@@ -3,6 +3,15 @@ import { v4 as uuid } from "uuid";
 import { processTranscript } from "../services/transcriptProcessing.service.js";
 
 const ALLOWED_SERVICES = ["full-pipeline", "audit-only", "compliance-only"];
+const MAX_CASEID_ATTEMPTS = 3;
+
+const normalizeCaseId = (caseId) => {
+  if (!caseId) return null;
+  const trimmed = caseId.trim();
+  return trimmed.length ? trimmed : null;
+};
+
+const generateCaseId = () => `CASE-${uuid().slice(0, 8).toUpperCase()}`;
 
 // Create a new transcript and initialize its processing status
 export const createTranscript = async (req, res) => {
@@ -14,10 +23,6 @@ export const createTranscript = async (req, res) => {
 
     if ((!files || files.length === 0) && !rawText) {
       return res.status(400).json({ error: "No input provided" });
-    }
-
-    if (!caseId?.trim()) {
-      return res.status(400).json({ error: "caseId is required" });
     }
 
     if (!insuranceProvider?.trim()) {
@@ -42,30 +47,50 @@ export const createTranscript = async (req, res) => {
       ? files.map((file) => file.path.replace(/\\/g, "/"))
       : [];
 
-    const transcript = await prisma.transcript.create({
-      data: {
-        transcriptId: uuid(),
-        inputType,
-        filePaths,
-        rawText: rawText || null,
-        caseId: caseId.trim(),
-        insuranceProvider: insuranceProvider.trim(),
-        policyType: policyType.trim(),
-        service: service || "full-pipeline",
-        userId: req.user.id,
-        status: "PROCESSING",
+    let resolvedCaseId = normalizeCaseId(caseId) || generateCaseId();
+    let transcript = null;
 
-        processingStatus: {
-          create: {
+    for (let attempt = 0; attempt < MAX_CASEID_ATTEMPTS; attempt += 1) {
+      try {
+        transcript = await prisma.transcript.create({
+          data: {
+            transcriptId: uuid(),
+            inputType,
+            filePaths,
+            rawText: rawText || null,
+            caseId: resolvedCaseId,
+            insuranceProvider: insuranceProvider.trim(),
+            policyType: policyType.trim(),
             service: service || "full-pipeline",
-            progress: 0,
-            currentStep: "",
-            steps: [],
+            userId: req.user.id,
+            status: "PROCESSING",
+
+            processingStatus: {
+              create: {
+                service: service || "full-pipeline",
+                progress: 0,
+                currentStep: "",
+                steps: [],
+              },
+            },
           },
-        },
-      },
-      include: { processingStatus: true },
-    });
+          include: { processingStatus: true },
+        });
+        break;
+      } catch (err) {
+        if (err?.code === "P2002" && err?.meta?.target?.includes("caseId")) {
+          resolvedCaseId = generateCaseId();
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!transcript) {
+      return res.status(409).json({
+        error: "Unable to generate a unique Case ID. Please try again.",
+      });
+    }
 
     setImmediate(() => {
       processTranscript(transcript).catch((err) => {
@@ -76,10 +101,18 @@ export const createTranscript = async (req, res) => {
     return res.status(201).json({
       id: transcript.id,
       transcriptId: transcript.transcriptId,
+      caseId: transcript.caseId,
     });
   } catch (error) {
     console.error("Create transcript error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    if (error?.code === "P2002") {
+      return res.status(409).json({
+        error: "caseId already exists. Use a unique Case ID.",
+      });
+    }
+    return res.status(500).json({
+      error: error?.message || "Internal server error",
+    });
   }
 };
 

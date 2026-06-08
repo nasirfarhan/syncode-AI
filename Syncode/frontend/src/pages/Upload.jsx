@@ -38,7 +38,6 @@ const Upload = () => {
   ];
 
   const isMetadataValid =
-    metadata.caseId.trim() !== "" &&
     metadata.insuranceProvider.trim() !== "" &&
     metadata.policyType.trim() !== "" &&
     (metadata.service === "" || allowedServices.includes(metadata.service));

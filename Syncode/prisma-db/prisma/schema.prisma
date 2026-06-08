@@ -101,6 +101,7 @@ model MedicalCode {
   transcript   Transcript @relation(fields: [transcriptId], references: [id])
 
   code         String
+  description  String?
   type         String     
 
   createdAt    DateTime   @default(now())

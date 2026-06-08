@@ -21,6 +21,8 @@ export default function FullPipelineResultsPage() {
       return;
     }
 
+    let retryTimer;
+
     const fetchResult = async () => {
       setLoading(true);
       try {
@@ -28,29 +30,34 @@ export default function FullPipelineResultsPage() {
           `${import.meta.env.VITE_BACKEND_URL}/api/results/${caseId}`,
           { credentials: "include" }
         );
+
+        if (res.status === 202) {
+          setError("Processing results. Please wait...");
+          retryTimer = setTimeout(fetchResult, 2000);
+          return;
+        }
+
         const data = await res.json();
 
         if (res.ok) {
           setResult(data);
+          setError("");
         } else {
           setError(data.error || "Failed to fetch results");
-          setResult(data);
+          setResult({ medicalCodes: [] });
         }
       } catch (err) {
         console.error(err);
-        setError("Failed to load results. Showing mock data.");
-        setResult({
-          medicalCodes: [
-            { code: "A123", type: "ICD-10" },
-            { code: "B456", type: "ICD-10" },
-          ],
-        });
+        setError("Failed to load results.");
+        setResult({ medicalCodes: [] });
       } finally {
         setLoading(false);
       }
     };
 
     fetchResult();
+
+    return () => clearTimeout(retryTimer);
   }, [caseId]);
 
   const handleDownload = () => {
@@ -65,7 +72,7 @@ Case ID: ${caseId}
 Extracted Medical Codes:
 ------------------------
 ${result.medicalCodes
-  ?.map((c, i) => `${i + 1}. ${c.code} (${c.type})`)
+  ?.map((c, i) => `${i + 1}. ${c.code} (${c.type}) - ${c.description || ""}`.trim())
   .join("\n")}
 `;
 
@@ -136,6 +143,7 @@ ${result.medicalCodes
                 <tr>
                   <th className="text-left pb-2">#</th>
                   <th className="text-left pb-2">Code</th>
+                  <th className="text-left pb-2">Name</th>
                   <th className="text-left pb-2">Type</th>
                 </tr>
               </thead>
@@ -147,6 +155,7 @@ ${result.medicalCodes
                       {index + 1}
                     </td>
                     <td className="py-3 font-mono">{code.code}</td>
+                    <td className="py-3">{code.description || "—"}</td>
                     <td>{code.type}</td>
                   </tr>
                 ))}

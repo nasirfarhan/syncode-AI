@@ -81,6 +81,7 @@ export const getResultsByCaseId = async (req, res) => {
           .map((c) => ({
             transcriptId: transcript.id,
             code: c.code || c.icd_code,
+            description: c.description || c.name || null,
             type: c.type || "ICD-10",
           }))
           .filter((c) => c.code);
